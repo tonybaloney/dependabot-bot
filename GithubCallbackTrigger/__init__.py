@@ -11,7 +11,12 @@ from github.Commit import Commit
 from github.PullRequest import PullRequest
 from github.Repository import Repository
 
-SUPPORTED_BOTS = {"dependabot", "dependabot-preview", "pyup-bot"}
+SUPPORTED_BOTS = {
+    "dependabot",
+    "dependabot-preview",
+    "dependabot-preview[bot]",
+    "pyup-bot",
+}
 
 
 def bot(user):
@@ -169,12 +174,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info(f"Received a request for package {package} to {version_to}")
 
     try:
-        changed_file = list(pr.get_files())[0]
-        pr.create_review(
-            body=f"This PR looks good to merge automatically because {package} is on the safe-list for this repository.",
-            commit=commit,
-            event="APPROVE",
-        )
+        if not any(review.user == "depend-a-bot-bot" for review in pr.get_reviews()):
+            pr.create_review(
+                body=f"This PR looks good to merge automatically because {package} is on the safe-list for this repository.",
+                commit=commit,
+                event="APPROVE",
+            )
         pr.merge(f"Dependabot-bot is merging PR for package {package} to {version_to}")
         logging.info(f"Merged {pr.url}")
     except github.GithubException as exc:
