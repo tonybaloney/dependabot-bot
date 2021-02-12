@@ -1,4 +1,4 @@
-# dependabot-bot
+# depend-a-lot-bot
 
 A bot for GitHub that automatically merges PRs from dependabot when they meet certain criteria:
 
