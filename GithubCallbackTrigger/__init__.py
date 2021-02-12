@@ -11,6 +11,33 @@ from github.PullRequest import PullRequest
 from github.Repository import Repository
 
 
+def bot(user):
+    # pyup.io
+    if user.login == "pyup-bot":
+        return True
+
+    # dependabot or the preview version
+    if "dependabot" in user.login and user.type == "Bot":
+        return True
+
+    return False
+
+
+def get_details(pr):
+    package = None
+    version_to = None
+
+    # pyup.io
+    if pr.user.login == "pyup-bot":
+        _, package, _, version_to = pr.title.split(" ", 4)
+
+    # dependabot or the preview version
+    if "dependabot" in pr.user.login and pr.user.type == "Bot":
+        _, package, _, _, _, version_to = pr.title.split(" ", 6)
+
+    return package, version_to
+
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
     req_body: dict = req.get_json()
@@ -37,22 +64,26 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     pr = connection.create_from_raw_data(PullRequest, raw_data=req_body["pull_request"])
     repo = connection.create_from_raw_data(Repository, raw_data=req_body["repository"])
 
-    # Only care about PRs from bots
-    if pr.user.type != "Bot":
-        return func.HttpResponse(f"Not a bot PR", status_code=200)
+    if not bot(pr.user):
+        return func.HttpResponse(
+            f"Not for a bot.",
+            status_code=200,
+        )
 
-    # Only care about PRs from dependabot or the preview version
-    if "dependabot" not in pr.user.login:
-        return func.HttpResponse(f"Not dependabot", status_code=200)
-
-    if not pr.mergeable or pr.merged:
+    if pr.mergeable == False or pr.merged:
         return func.HttpResponse(
             f"PR cannot be merged automatically, or it is already merged.",
             status_code=200,
         )
 
     # Determine which package is being bumped.
-    _, package, _, version_from, _, version_to = pr.title.split(" ", 6)
+    package, version_to = get_details(pr)
+
+    if not package or not version_to:
+        return func.HttpResponse(
+            f"PR not from a bot?",
+            status_code=200,
+        )
 
     # Get the safelist
     try:
@@ -100,9 +131,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             status_code=200,
         )
 
-    logging.info(
-        f"Received a request for package {package} from {version_from} to {version_to}"
-    )
+    logging.info(f"Received a request for package {package} to {version_to}")
 
     try:
         changed_file = list(pr.get_files())[0]
@@ -112,9 +141,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             path=changed_file.filename,
             position=0,
         )
-        pr.merge(
-            "Dependabot-bot is merging PR for package {package} from {version_from} to {version_to}"
-        )
+        pr.merge(f"Dependabot-bot is merging PR for package {package} to {version_to}")
         logging.info(f"Merged {pr.url}")
     except github.GithubException as exc:
         logging.error(f"Failed to merge PR - {exc.status}, {exc.data}")
