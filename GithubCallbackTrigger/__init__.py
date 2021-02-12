@@ -10,6 +10,8 @@ from github.Commit import Commit
 from github.PullRequest import PullRequest
 from github.Repository import Repository
 
+SUPPORTED_BOTS = {"dependabot", "dependabot-preview", "pyup-bot"}
+
 
 def bot(user):
     # pyup.io
@@ -41,19 +43,29 @@ def get_details(pr):
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
     req_body: dict = req.get_json()
-    if "pull_request" not in req_body:
+    if "pull_request" not in req_body and "check_run" not in req_body:
         return func.HttpResponse(f"Only care about PRs", status_code=200)
+    if (
+        "pull_request" in req_body
+        and req_body["pull_request"]["user"]["login"] not in SUPPORTED_BOTS
+    ):
+        return func.HttpResponse(f"Only care about bot PRs", status_code=200)
+    if "check_run" in req_body:
+        if req_body["action"] != "completed":
+            return func.HttpResponse(f"Only care about PRs", status_code=200)
+        if (
+            "pull_requests" not in req_body["check_run"]
+            or len(req_body["check_run"]["pull_requests"]) != 1
+        ):
+            return func.HttpResponse(f"Only care about PRs", status_code=200)
 
     try:
         integration = github.GithubIntegration(
             integration_id=os.getenv("GITHUB_INTEGRATION_ID"),
             private_key=base64.b64decode(os.getenv("GITHUB_PRIVATE_KEY")),
         )
-        installation = integration.get_installation(
-            req_body["repository"]["owner"]["login"], req_body["repository"]["name"]
-        )
-
-        connection = github.Github(integration.get_access_token(installation.id).token)
+        installation_id = req_body["installation"]["id"]
+        connection = github.Github(integration.get_access_token(installation_id).token)
     except github.GithubException as exc:
         logging.error(exc.data)
         return func.HttpResponse(
@@ -61,8 +73,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             status_code=403,
         )
 
-    pr = connection.create_from_raw_data(PullRequest, raw_data=req_body["pull_request"])
     repo = connection.create_from_raw_data(Repository, raw_data=req_body["repository"])
+    if "pull_request" in req_body:
+        pr: PullRequest = connection.create_from_raw_data(
+            PullRequest, raw_data=req_body["pull_request"]
+        )
+    elif "check_run" in req_body:
+        pr: PullRequest = repo.get_pull(
+            req_body["check_run"]["pull_requests"][0]["number"]
+        )
 
     if not bot(pr.user):
         return func.HttpResponse(
