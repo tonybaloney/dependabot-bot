@@ -154,11 +154,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         changed_file = list(pr.get_files())[0]
-        pr.create_comment(
+        pr.create_review(
             body=f"This PR looks good to merge automatically because {package} is on the safe-list for this repository.",
-            commit_id=commit,
-            path=changed_file.filename,
-            position=0,
+            commit=commit,
+            event="APPROVE",
         )
         pr.merge(f"Dependabot-bot is merging PR for package {package} to {version_to}")
         logging.info(f"Merged {pr.url}")
