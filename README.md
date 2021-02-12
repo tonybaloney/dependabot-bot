@@ -5,6 +5,8 @@ A bot for GitHub that automatically merges PRs from dependabot when they meet ce
 - All the checks are passing
 - The package is on a safe-list
 
+![screenshot](screenshot.png)
+
 ## Installation
 
 Go to [github.com/apps/depend-a-bot-bot](https://github.com/apps/depend-a-bot-bot) to install.
