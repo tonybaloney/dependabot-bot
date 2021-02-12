@@ -1,21 +1,38 @@
+import base64
 import logging
-import re
-from github.PullRequest import PullRequest
-from github.CheckRun import CheckRun
-from github.Commit import Commit
-import github
+import os
+
 import azure.functions as func
+import github
+from github.Commit import Commit
+from github.PullRequest import PullRequest
+from github.Repository import Repository
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Python HTTP trigger function processed a request.")
     req_body: dict = req.get_json()
     if "pull_request" not in req_body:
-        return func.HttpResponse(f"Unsupported operation", status_code=405)
-    logging.info(req.get_body().decode(encoding="utf8"))
-    pr = github.Github().create_from_raw_data(
-        PullRequest, raw_data=req_body["pull_request"]
-    )
+        return func.HttpResponse(f"Only care about PRs", status_code=200)
+    repo = github.Github().create_from_raw_data(Repository, req_body["repository"])
+
+    try:
+        integration = github.GithubIntegration(
+            integration_id=os.getenv("GITHUB_INTEGRATION_ID"),
+            private_key=base64.b64decode(os.getenv("GITHUB_PRIVATE_KEY")),
+        )
+        installation = integration.get_installation(repo.owner.login, repo.name)
+
+        connection = github.Github(integration.get_access_token(installation.id).token)
+    except github.GithubException as exc:
+        logging.error(exc.data)
+        return func.HttpResponse(
+            f"Failed to authenticate to the Github API, check that this app is installed",
+            status_code=403,
+        )
+
+    pr = connection.create_from_raw_data(PullRequest, raw_data=req_body["pull_request"])
+
     # Only care about PRs from bots
     if pr.user.type != "Bot":
         return func.HttpResponse(f"Not a bot PR", status_code=200)
@@ -46,7 +63,23 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             status_code=200,
         )
 
+    logging.info(
+        f"Received a request for package {package} from {version_from} to {version_to}"
+    )
+
+    try:
+        logging.info(pr.url)
+        pr.merge(
+            "Dependabot-bot is merging PR for package {package} from {version_from} to {version_to}"
+        )
+    except github.GithubException as exc:
+        logging.error(f"Failed to merge PR - {exc.status}, {exc.data}")
+        return func.HttpResponse(
+            f"Failed to merge PR - {exc.status}",
+            status_code=500,
+        )
+
     return func.HttpResponse(
-        f"Received a request for package {package} from {version_from} to {version_to}",
+        "Automatically merged PR",
         status_code=200,
     )

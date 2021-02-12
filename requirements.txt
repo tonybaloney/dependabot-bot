@@ -3,4 +3,4 @@
 # Manually managing azure-functions-worker may cause unexpected issues
 
 azure-functions
-PyGithub==1.54.1
+PyGithub[integrations]==1.54.1

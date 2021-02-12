@@ -1,5 +1,16 @@
+import pytest
+import json
+import os
 import azure.functions as func
 from GithubCallbackTrigger import main
+
+
+@pytest.fixture(autouse=True)
+def azure_function_environment_vars():
+    with open("local.settings.json") as f:
+        local_settings = json.load(f)
+    for k, v in local_settings["Values"].items():
+        os.environ[k] = v
 
 
 def test_pull_request():
@@ -15,7 +26,4 @@ def test_dependabot_pull_request():
         req = func.HttpRequest(method="POST", url="https://testing.com", body=pr.read())
         result = main(req)
         assert result.status_code == 200
-        assert (
-            result.get_body().decode("utf8")
-            == "Received a request for package junit-jupiter from 5.7.0 to 5.7.1"
-        )
+        assert result.get_body().decode("utf8") == "Automatically merged PR"
