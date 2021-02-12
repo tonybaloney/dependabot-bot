@@ -4,3 +4,4 @@
 
 azure-functions
 PyGithub[integrations]==1.54.1
+pyyaml

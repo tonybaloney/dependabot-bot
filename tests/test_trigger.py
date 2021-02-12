@@ -1,4 +1,5 @@
 import pytest
+from pytest_mock import MockerFixture
 import json
 import os
 import azure.functions as func
@@ -21,9 +22,11 @@ def test_pull_request():
         assert result.get_body().decode("utf8") == "Not a bot PR"
 
 
-def test_dependabot_pull_request():
+def test_dependabot_pull_request(mocker: MockerFixture):
     with open("tests/dependabot_pr.json", "rb") as pr:
         req = func.HttpRequest(method="POST", url="https://testing.com", body=pr.read())
+        mocker.patch("github.PullRequest.PullRequest.merge")
+        mocker.patch("github.PullRequest.PullRequest.create_comment")
         result = main(req)
         assert result.status_code == 200
         assert result.get_body().decode("utf8") == "Automatically merged PR"
