@@ -2,7 +2,8 @@ import base64
 import logging
 import os
 from github.ContentFile import ContentFile
-
+import hmac
+import hashlib
 import yaml
 import azure.functions as func
 import github
@@ -41,6 +42,21 @@ def get_details(pr):
 
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
+    if "X-Hub-Signature-256" not in req.headers:
+        return func.HttpResponse(f"Go away", status_code=403)
+
+    digest = (
+        "sha256="
+        + hmac.new(
+            os.getenv("GITHUB_HOOK_TOKEN").encode(),
+            msg=req.get_body(),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+    )
+
+    if not hmac.compare_digest(req.headers["X-Hub-Signature-256"], digest):
+        return func.HttpResponse(f"Go away", status_code=403)
+
     logging.info("Python HTTP trigger function processed a request.")
     req_body: dict = req.get_json()
     if "pull_request" not in req_body and "check_run" not in req_body:
