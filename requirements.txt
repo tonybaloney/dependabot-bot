@@ -5,3 +5,4 @@
 azure-functions
 PyGithub[integrations]==1.54.1
 pyyaml
+pyjwt>=2.4.0 # not directly required, pinned by Snyk to avoid a vulnerability
