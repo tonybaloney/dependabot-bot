@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+from typing import List
 from github.ContentFile import ContentFile
 import hmac
 import hashlib
@@ -10,6 +11,7 @@ import github
 from github.Commit import Commit
 from github.PullRequest import PullRequest
 from github.Repository import Repository
+from github.CheckRun import CheckRun
 
 SUPPORTED_BOTS = {
     "dependabot",
@@ -173,9 +175,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Warning: This PR somehow has lots of commits?")
 
     commit: Commit = list(pr.get_commits())[-1]
+    check_runs: List[CheckRun] = list(commit.get_check_runs())
 
-    any_failed = any(run.conclusion == "failure" for run in commit.get_check_runs())
-    if any_failed:
+    if not all(run.status == "completed" for run in check_runs):
+        logging.info("Not all checks have completed")
+        return func.HttpResponse(
+            f"PR cannot be merged automatically because not all checks have completed.",
+            status_code=200,
+        )
+
+    if any(run.conclusion == "failure" for run in check_runs):
+        logging.info("One of the checks failed")
         return func.HttpResponse(
             "PR cannot be merged automatically because one of the checks failed.",
             status_code=200,
@@ -185,6 +195,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         if not any(review.user == "depend-a-bot-bot" for review in pr.get_reviews()):
+            logging.info("Marking PR as approved, check runs are all green")
             pr.create_review(
                 body=f"This PR looks good to merge automatically because {package} is on the safe-list for this repository.",
                 commit=commit,
