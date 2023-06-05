@@ -15,6 +15,7 @@ from github.CheckRun import CheckRun
 
 SUPPORTED_BOTS = {
     "dependabot",
+    "dependabot[bot]",
     "dependabot-preview",
     "dependabot-preview[bot]",
     "pyup-bot",
@@ -45,42 +46,48 @@ def get_details(pr):
     if "dependabot" in pr.user.login and pr.user.type == "Bot":
         _, package, _, _, _, version_to = pr.title.split(" ", 6)
 
+    if package:
+        package = package.lower()
+
     return package, version_to
 
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
-    if "X-Hub-Signature-256" not in req.headers:
-        return func.HttpResponse(f"Go away", status_code=403)
-
-    digest = (
+def make_digest(body:bytes) -> str:
+    return (
         "sha256="
         + hmac.new(
             os.getenv("GITHUB_HOOK_TOKEN").encode(),
-            msg=req.get_body(),
+            msg=body,
             digestmod=hashlib.sha256,
         ).hexdigest()
     )
 
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    if "X-Hub-Signature-256" not in req.headers:
+        return func.HttpResponse("Go away", status_code=403)
+
+    digest = make_digest(req.get_body())
+
     if not hmac.compare_digest(req.headers["X-Hub-Signature-256"], digest):
-        return func.HttpResponse(f"Go away", status_code=403)
+        return func.HttpResponse("Go away", status_code=403)
 
     logging.info("Python HTTP trigger function processed a request.")
     req_body: dict = req.get_json()
     if "pull_request" not in req_body and "check_run" not in req_body:
-        return func.HttpResponse(f"Only care about PRs", status_code=200)
+        return func.HttpResponse("Only care about PRs", status_code=200)
     if (
         "pull_request" in req_body
         and req_body["pull_request"]["user"]["login"] not in SUPPORTED_BOTS
     ):
-        return func.HttpResponse(f"Only care about bot PRs", status_code=200)
+        return func.HttpResponse("Only care about bot PRs", status_code=200)
     if "check_run" in req_body:
         if req_body["action"] != "completed":
-            return func.HttpResponse(f"Only care about PRs", status_code=200)
+            return func.HttpResponse("Only care about PRs", status_code=200)
         if (
             "pull_requests" not in req_body["check_run"]
             or len(req_body["check_run"]["pull_requests"]) != 1
         ):
-            return func.HttpResponse(f"Only care about PRs", status_code=200)
+            return func.HttpResponse("Only care about PRs", status_code=200)
 
     try:
         integration = github.GithubIntegration(
@@ -92,7 +99,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     except github.GithubException as exc:
         logging.error(exc.data)
         return func.HttpResponse(
-            f"Failed to authenticate to the Github API, check that this app is installed",
+            "Failed to authenticate to the Github API, check that this app is installed",
             status_code=403,
         )
 
@@ -108,13 +115,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     if not bot(pr.user):
         return func.HttpResponse(
-            f"Not for a bot.",
+            "Not for a bot.",
             status_code=200,
         )
 
-    if pr.mergeable == False or pr.merged:
+    if pr.mergeable is False or pr.merged:
         return func.HttpResponse(
-            f"PR cannot be merged automatically, or it is already merged.",
+            "PR cannot be merged automatically, or it is already merged.",
             status_code=200,
         )
 
@@ -123,7 +130,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     if not package or not version_to:
         return func.HttpResponse(
-            f"PR not from a bot?",
+            "PR not from a bot?",
             status_code=200,
         )
 
@@ -131,32 +138,35 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         config_file: ContentFile = repo.get_contents(".github/dependabot-bot.yml")
     except github.UnknownObjectException:
-        logging.info("Can't find configuration file")
-        return func.HttpResponse(
-            f"PR cannot be merged automatically, this repo doesn't have a config file.",
-            status_code=200,
-        )
+        try:
+            config_file: ContentFile = repo.get_contents(".github/dependabot-bot.yaml")
+        except github.UnknownObjectException:
+            logging.info("Can't find configuration file")
+            return func.HttpResponse(
+                "PR cannot be merged automatically, this repo doesn't have a config file.",
+                status_code=200,
+            )
 
     try:
         config = yaml.safe_load(config_file.decoded_content)
     except Exception as exc:
         logging.error(f"Can't load configuration file {exc}")
         return func.HttpResponse(
-            f"PR cannot be merged automatically, the config file is invalid.",
+            "PR cannot be merged automatically, the config file is invalid.",
             status_code=406,
         )
 
     if "safe" not in config:
-        logging.error(f"Config missing safe list")
+        logging.error("Config missing safe list")
         return func.HttpResponse(
-            f"PR cannot be merged automatically, the config file is invalid because its missing the 'safe' list.",
+            "PR cannot be merged automatically, the config file is invalid because its missing the 'safe' list.",
             status_code=406,
         )
 
-    if package not in config["safe"]:
-        logging.info(f"Package not on safe list")
+    if package not in [pkg.lower() for pkg in config["safe"]]:
+        logging.info("Package not on safe list")
         return func.HttpResponse(
-            f"This package is not on the safe list, ignoring.",
+            "This package is not on the safe list, ignoring.",
             status_code=200,
         )
 
@@ -177,7 +187,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     if any(run.conclusion == "failure" for run in check_runs):
         logging.info("One of the checks failed")
         return func.HttpResponse(
-            f"PR cannot be merged automatically because one of the checks failed.",
+            "PR cannot be merged automatically because one of the checks failed.",
             status_code=200,
         )
 

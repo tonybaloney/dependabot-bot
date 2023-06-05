@@ -3,5 +3,6 @@
 # Manually managing azure-functions-worker may cause unexpected issues
 
 azure-functions
-PyGithub[integrations]==1.54.1
+PyGithub[integrations]==1.58.2
 pyyaml
+pyjwt>=2.4.0 # not directly required, pinned by Snyk to avoid a vulnerability

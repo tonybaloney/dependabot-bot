@@ -1,4 +1,4 @@
-# dependabot-bot
+# depend-a-lot-bot
 
 A bot for GitHub that automatically merges PRs from dependabot when they meet certain criteria:
 
@@ -9,7 +9,7 @@ A bot for GitHub that automatically merges PRs from dependabot when they meet ce
 
 ## Installation
 
-Go to [github.com/apps/depend-a-bot-bot](https://github.com/apps/depend-a-bot-bot) to install.
+Go to [github.com/apps/depend-a-lot-bot](https://github.com/apps/depend-a-lot-bot) to install.
 
 ## Configuration
 
