@@ -40,3 +40,13 @@ def test_dependabot_completed_check_run(mocker: MockerFixture):
         result = main(req)
         assert result.status_code == 200
         assert result.get_body().decode("utf8") == "Automatically merged PR"
+
+
+def test_dependabot_in_progress_check_run(mocker: MockerFixture):
+    with open("tests/check_run.json", "rb") as pr:
+        req = func.HttpRequest(method="POST", url="https://testing.com", body=pr.read())
+        mocker.patch("github.PullRequest.PullRequest.merge")
+        mocker.patch("github.PullRequest.PullRequest.create_review")
+        result = main(req)
+        assert result.status_code == 200
+        assert result.get_body().decode("utf8") == "Automatically merged PR"
